@@ -1,35 +1,8 @@
-# Python
-__pycache__
-*.pyc
-*.egg-info
-dist
+liuhaotian
+results
+playground/data
+openai
 
-# Log
-*.log
-*.log.*
-*.json
-*.jsonl
-
-# Data
-!**/alpaca-data-conversation.json
-
-# Editor
-.idea
-*.swp
-
-# Other
-.DS_Store
-wandb
-output
-
-checkpoints
-ckpts*
-
-.ipynb_checkpoints
-*.ipynb
-
-# DevContainer
-!.devcontainer/*
-
-# Demo
-serve_images/
+**__pycache__
+**.pyc
+**.egg-info

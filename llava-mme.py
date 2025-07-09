@@ -1,15 +1,21 @@
+"""
+Adapted from DAMO.
+"""
+
 from llava.model.builder import load_pretrained_model
 from llava.mm_utils import get_model_name_from_path
 from llava.eval.run_llava import eval_model
 import os
 model_path = "liuhaotian/llava-v1.5-7b"
+print(f"=== Loading model from {model_path}... ===")
 tokenizer, model, image_processor, context_len = load_pretrained_model(
     model_path=model_path,
     model_base=None,
     model_name=get_model_name_from_path(model_path),
-    device_map="cuda",
-    device="cuda",
+    device_map="auto",
+    device="cuda",  # Only for putting weight vectors in special cases
 )
+print("=== Model loaded successfully! ===")
 
 
 import argparse
@@ -29,76 +35,84 @@ import os
 import shutil
 import subprocess
 
-eval_tool_dir = "/path/to/MME_Benchmark_release_version/MME_Benchmark/eval_tool"
-output_dir = os.path.join(eval_tool_dir, output_dir)
-source_dir = os.path.join(eval_tool_dir, "Your_Results")  ## Here, Your_Results denotes the empty MME results dir.
+eval_tool_dir = "./"
+output_dir = os.path.join(eval_tool_dir, "results")
+source_dir = os.path.join(output_dir, "outputs")  ## Here, Your_Results denotes the empty MME results dir.
+if not os.path.exists(eval_tool_dir):
+    os.makedirs(eval_tool_dir)
+    print(f"Created directory: {eval_tool_dir}")
+if not os.path.exists(output_dir):
+    os.makedirs(output_dir)
+    print(f"Created directory: {output_dir}")
+if not os.path.exists(source_dir):
+    os.makedirs(source_dir)
+    print(f"Created directory: {source_dir}")
 
 
-if os.path.exists(output_dir):
-    shutil.rmtree(output_dir)  
+# if os.path.exists(output_dir):
+#     shutil.rmtree(output_dir)  
 
-
-shutil.copytree(source_dir, output_dir)
-
+if not os.path.exists(output_dir):
+    shutil.copytree(source_dir, output_dir)
 
 
 
 folders_and_files = [
     {
         "image_folder": "MME_Benchmark_release_version/MME_Benchmark/artwork/images",
-        "output_file_path": f"MME_Benchmark_release_version/MME_Benchmark/eval_tool/{output_dir}/artwork.txt"
+        "output_file_path": f"{output_dir}/artwork.txt"
     },
     {
         "image_folder": "MME_Benchmark_release_version/MME_Benchmark/celebrity/images",
-        "output_file_path": f"MME_Benchmark_release_version/MME_Benchmark/eval_tool/{output_dir}/celebrity.txt"
+        "output_file_path": f"{output_dir}/celebrity.txt"
     },
     {
         "image_folder": "MME_Benchmark_release_version/MME_Benchmark/code_reasoning",
-        "output_file_path": f"MME_Benchmark_release_version/MME_Benchmark/eval_tool/{output_dir}/code_reasoning.txt"
+        "output_file_path": f"{output_dir}/code_reasoning.txt"
     },
     {
         "image_folder": "MME_Benchmark_release_version/MME_Benchmark/color",
-        "output_file_path": f"MME_Benchmark_release_version/MME_Benchmark/eval_tool/{output_dir}/color.txt"
+        "output_file_path": f"{output_dir}/color.txt"
     },
     {
         "image_folder": "MME_Benchmark_release_version/MME_Benchmark/commonsense_reasoning",
-        "output_file_path": f"MME_Benchmark_release_version/MME_Benchmark/eval_tool/{output_dir}/commonsense_reasoning.txt"
+        "output_file_path": f"{output_dir}/commonsense_reasoning.txt"
     },
     {
         "image_folder": "MME_Benchmark_release_version/MME_Benchmark/count",
-        "output_file_path": f"MME_Benchmark_release_version/MME_Benchmark/eval_tool/{output_dir}/count.txt"
+        "output_file_path": f"{output_dir}/count.txt"
     },
     {
         "image_folder": "MME_Benchmark_release_version/MME_Benchmark/existence",
-        "output_file_path": f"MME_Benchmark_release_version/MME_Benchmark/eval_tool/{output_dir}/existence.txt"
+        "output_file_path": f"{output_dir}/existence.txt"
     },
     {
         "image_folder": "MME_Benchmark_release_version/MME_Benchmark/landmark/images",
-        "output_file_path": f"MME_Benchmark_release_version/MME_Benchmark/eval_tool/{output_dir}/landmark.txt"
+        "output_file_path": f"{output_dir}/landmark.txt"
     },
     {
         "image_folder": "MME_Benchmark_release_version/MME_Benchmark/numerical_calculation",
-        "output_file_path": f"MME_Benchmark_release_version/MME_Benchmark/eval_tool/{output_dir}/numerical_calculation.txt"
+        "output_file_path": f"{output_dir}/numerical_calculation.txt"
     },
     {
         "image_folder": "MME_Benchmark_release_version/MME_Benchmark/OCR",
-        "output_file_path": f"MME_Benchmark_release_version/MME_Benchmark/eval_tool/{output_dir}/OCR.txt"
+        "output_file_path": f"{output_dir}/OCR.txt"
     },
     {
         "image_folder": "MME_Benchmark_release_version/MME_Benchmark/position",
-        "output_file_path": f"MME_Benchmark_release_version/MME_Benchmark/eval_tool/{output_dir}/position.txt"
+        "output_file_path": f"{output_dir}/position.txt"
     },
     {
         "image_folder": "MME_Benchmark_release_version/MME_Benchmark/posters/images",
-        "output_file_path": f"MME_Benchmark_release_version/MME_Benchmark/eval_tool/{output_dir}/posters.txt"
+        "output_file_path": f"{output_dir}/posters.txt"
     },
     {
         "image_folder": "MME_Benchmark_release_version/MME_Benchmark/scene/images",
-        "output_file_path": f"MME_Benchmark_release_version/MME_Benchmark/eval_tool/{output_dir}/scene.txt"
+        "output_file_path": f"{output_dir}/scene.txt"
     },
     {
         "image_folder": "MME_Benchmark_release_version/MME_Benchmark/text_translation",
-        "output_file_path": f"MME_Benchmark_release_version/MME_Benchmark/eval_tool/{output_dir}/text_translation.txt"
+        "output_file_path": f"{output_dir}/text_translation.txt"
     },
 ]
 
@@ -106,8 +120,11 @@ for item in folders_and_files:
     image_folder = item["image_folder"]
     output_file_path = item["output_file_path"]
 
-    with open(output_file_path, 'r', encoding='utf-8') as file:
-        lines = file.readlines()
+    if os.path.exists(output_file_path):
+        with open(output_file_path, 'r', encoding='utf-8') as file:
+            lines = file.readlines()
+    else:
+        lines = []
 
     with open(output_file_path, 'w', encoding='utf-8') as output_file:
         idx = 0
