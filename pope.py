@@ -175,7 +175,7 @@ def main():
     ### Step 1: Load POPE
     data_folder = "../data"
     subset = "coco"
-    subsplit = "adversarial"
+    subsplit = "popular"
     model_name = "llava-v1.5-7b"
     questions = [json.loads(q) for q in open(f"{data_folder}/POPE/{subset}/{subset}_pope_{subsplit}.json", "r")]
     output_folder = "./results"
