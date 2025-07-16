@@ -16,7 +16,6 @@ def parse_args():
     return argparser.parse_args()
 
 
-
 class ImageViewer(tk.Tk):
     def __init__(self, images_info):
         super().__init__()
@@ -29,6 +28,11 @@ class ImageViewer(tk.Tk):
         # UI Components
         self.img_label = tk.Label(self)
         self.img_label.pack(pady=50)
+
+        # Prediction correctness label
+        self.correctness_label = tk.Label(self, font=("Helvetica", 48, "bold"))
+        self.correctness_label.pack(pady=10)
+
         self.info_text = tk.Text(self, height=8, wrap=tk.WORD, font=("Helvetica", 32), padx=40, pady=40)
         self.info_text.pack(fill=tk.BOTH, expand=True, padx=80)
 
@@ -41,26 +45,35 @@ class ImageViewer(tk.Tk):
     def show_image(self):
         if self.idx >= len(self.images_info):
             self.img_label.config(image='', text='Done!')
+            self.correctness_label.config(text='')
             self.info_text.delete("1.0", tk.END)
             self.info_text.insert(tk.END, "No more images.")
             self.next_button.config(state=tk.DISABLED)
             return
 
         info = self.images_info[self.idx]
-        pil_img = info['image'].resize((1800, 1300))  # Even bigger image area
+        pil_img = info['image'].resize((1800, 1300))
         self.tk_img = ImageTk.PhotoImage(pil_img)
         self.img_label.config(image=self.tk_img)
         self.img_label.image = self.tk_img
 
+        # Show correctness
+        pred = str(info['model_output']).strip().lower()
+        ans = str(info['answer']).strip().lower()
+        if pred == ans:
+            self.correctness_label.config(text="CORRECT", fg="green")
+        else:
+            self.correctness_label.config(text="WRONG", fg="red")
+
         # Display info
         self.info_text.delete("1.0", tk.END)
         meta = (
-            f"Question ID: {info['question_id']}\n"
             f"Prompt: {info['prompt']}\n"
             f"VLM output: {info['model_output']}\n"
-            f"Model ID: {info['model_id']}\n"
-            f"Image File: {info['image_file']}\n"
             f"Answer (Label): {info['answer']}\n"
+            f"Image File: {info['image_file']}\n"
+            f"Question ID: {info['question_id']}\n"
+            f"Model ID: {info['model_id']}\n"
             + "-"*90
         )
         self.info_text.insert(tk.END, meta)
