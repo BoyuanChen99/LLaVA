@@ -1,13 +1,13 @@
 """
-Adapted from ./predict.py in original LLaVA =repo.
+This inference code is adapted from ./predict.py in the original LLaVA-v1.5 repo, from which this repo is forked. Quite a few changes are made to make it work on a local Ubuntu machine, as well as to make the code more modular and easier to use.
+Running this script will download the model weights and run inference on a given image and prompt. The output will be streamed to the console. Before running, please make sure you have set the environment variables `HUGGINGFACE_TOKEN` and `HF_HOME` to your Hugging Face token and cache directory, respectively.
 """
+
 import os
 import torch
 from PIL import Image
 import requests
 from io import BytesIO
-import time
-import subprocess
 from threading import Thread
 from llava.constants import IMAGE_TOKEN_INDEX, DEFAULT_IMAGE_TOKEN
 from llava.conversation import conv_templates, SeparatorStyle
@@ -16,9 +16,11 @@ from llava.utils import disable_torch_init
 from llava.mm_utils import tokenizer_image_token
 from transformers.generation.streamers import TextIteratorStreamer
 from cog import BasePredictor, Input, Path, ConcatenateIterator
+import numpy as np
 
-# This line is from the original predict.py, but it is not necessary, as users mostly have their own HF cache directory.
+### The line commented out is from the original predict.py. It is not necessary, as users mostly have their own HF cache directory.
 # os.environ["HUGGINGFACE_HUB_CACHE"] = os.getcwd() + "/weights"
+HUGGINGFACE_CACHE = os.getenv("HF_HOME")
 
 ### Get the hf token from env, as LLaVA-v1.5 requires it to download the model weights
 HF_TOKEN = os.getenv("HUGGINGFACE_TOKEN")
@@ -27,13 +29,15 @@ HF_TOKEN = os.getenv("HUGGINGFACE_TOKEN")
 # url for the weights mirror (Already dead, so need to be replaced)
 REPLICATE_WEIGHTS_URL = "https://weights.replicate.delivery/default"
 HF_WEIGHTS_URL = "https://huggingface.co"
+model_name = "llava-v1.5-7b"
+model_author = "liuhaotian"
 # files to download from the weights mirrors
 weights = [
     {
-        "dest": "liuhaotian/llava-v1.5-7b",
+        "dest": HUGGINGFACE_CACHE + f"/{model_author}/{model_name}",
         # git commit hash from huggingface (obsolete, as the LLaVA-v1.5 is no longer updated, we don't need to use git commit hash)
         # "src": "llava-v1.5-7b/12e054b30e8e061f423c7264bc97d4248232e965",
-        "src": "liuhaotian/llava-v1.5-7b/resolve/main",
+        "src": f"{model_author}/{model_name}/resolve/main",
         "files": [
             "config.json",
             "generation_config.json",
@@ -68,23 +72,6 @@ def download_json(url: str, dest: Path, hf_token: str):
     else:
         print(f"Failed to download {url}. Status code: {res.status_code}")
 
-# Originally from predict.py, but it is no longer working, as pget does not support verified downloads.
-def download_weights(baseurl: str, basedest: str, files: list[str]):
-    basedest = Path(basedest)
-    start = time.time()
-    print("downloading to: ", basedest)
-    basedest.mkdir(parents=True, exist_ok=True)
-    for f in files:
-        dest = basedest / f
-        url = os.path.join(HF_WEIGHTS_URL, baseurl, f)
-        if not dest.exists():
-            print("downloading url: ", url)
-            if dest.suffix == ".json":
-                download_json(url, dest, HF_TOKEN)
-            else:
-                subprocess.check_call(["pget", url, str(dest)], close_fds=False)
-    print("downloading took: ", time.time() - start)
-
 ### Our own custom download function with token support
 def download_file_with_token(url, dest: Path, token: str):
     print(f"⬇ Downloading {url} → {dest}")
@@ -114,7 +101,7 @@ class Predictor(BasePredictor):
                 )
         disable_torch_init()
     
-        self.tokenizer, self.model, self.image_processor, self.context_len = load_pretrained_model("liuhaotian/llava-v1.5-13b", model_name="llava-v1.5-13b", model_base=None, load_8bit=False, load_4bit=False)
+        self.tokenizer, self.model, self.image_processor, self.context_len = load_pretrained_model(f"{model_author}/{model_name}", model_name=model_name, model_base=None, load_8bit=False, load_4bit=False)
 
     def predict(
         self,
@@ -130,6 +117,9 @@ class Predictor(BasePredictor):
         conv = conv_templates[conv_mode].copy()
     
         image_data = load_image(str(image))
+        print(f"Image data type: {type(image_data)}; image value dtype (int, float or float64): {np.array(image_data).dtype}")
+        print(f"Processing image: {image.name}, size: {image_data.size}, shape: {image_data.size[1]}x{image_data.size[0]}")
+        print(f"Type of image: {type(image_data)}")
         image_tensor = self.image_processor.preprocess(image_data, return_tensors='pt')['pixel_values'].half().cuda()
     
         # loop start
@@ -137,11 +127,13 @@ class Predictor(BasePredictor):
         # just one turn, always prepend image token
         inp = DEFAULT_IMAGE_TOKEN + '\n' + prompt
         conv.append_message(conv.roles[0], inp)
-
         conv.append_message(conv.roles[1], None)
         prompt = conv.get_prompt()
     
         input_ids = tokenizer_image_token(prompt, self.tokenizer, IMAGE_TOKEN_INDEX, return_tensors='pt').unsqueeze(0).cuda()
+        print(f"Input IDs shape: {input_ids.shape}")
+        print(f"input_ids: {input_ids}")
+        input()
         stop_str = conv.sep if conv.sep_style != SeparatorStyle.TWO else conv.sep2
         keywords = [stop_str]
         streamer = TextIteratorStreamer(self.tokenizer, skip_prompt=True, timeout=20.0)
@@ -186,12 +178,17 @@ def load_image(image_file):
     return image
 
 
+### Main
 def main():
+    # Initialize the VLM
     predictor = Predictor()
     predictor.setup()
+    print(f"IMAGE_TOKEN_INDEX is {IMAGE_TOKEN_INDEX}")
+    print(f"DEFAULT_IMAGE_TOKEN is {DEFAULT_IMAGE_TOKEN}")
+    input()
     
-    # Example usage
-    image_path = "./examples/cat.png"  # Replace with your image path
+    # Load the image from the example
+    image_path = "./examples/cat.png"
     prompt = "What is in this image? What is the estimated weight of the subject?"
     
     for output in predictor.predict(
@@ -202,7 +199,6 @@ def main():
         max_tokens=200,
     ):
         print(output, end='', flush=True)
-
 
 
 if __name__ == "__main__":
