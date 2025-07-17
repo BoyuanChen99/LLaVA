@@ -7,15 +7,12 @@ import torch
 from PIL import Image
 import requests
 from io import BytesIO
-from threading import Thread
 from llava.constants import IMAGE_TOKEN_INDEX, DEFAULT_IMAGE_TOKEN, DEFAULT_IM_START_TOKEN, DEFAULT_IM_END_TOKEN
 from llava.conversation import conv_templates, SeparatorStyle
 from llava.model.builder import load_pretrained_model
 from llava.utils import disable_torch_init
 from llava.mm_utils import tokenizer_image_token
-from transformers.generation.streamers import TextIteratorStreamer
-from cog import BasePredictor, Input, Path, ConcatenateIterator
-import numpy as np
+from cog import BasePredictor, Input, Path
 import json
 from tqdm import tqdm
 
@@ -173,64 +170,68 @@ def main():
     predictor.setup()
     
     ### Step 1: Load POPE
+    all_subsplits = ["popular", "adversarial", "random"]
     data_folder = "../data"
-    subset = "coco"
+    subset = "gqa"
     subsplit = "popular"
     model_name = "llava-v1.5-7b"
-    questions = [json.loads(q) for q in open(f"{data_folder}/POPE/{subset}/{subset}_pope_{subsplit}.json", "r")]
-    output_folder = "./results"
+    output_folder = "./results/pope"
     os.makedirs(output_folder, exist_ok=True)
-    output_file = f"{output_folder}/{subset}_pope_{subsplit}_{model_name}.jsonl"
 
-    # print(f"DEFAULT_IMAGE_TOKEN is {DEFAULT_IMAGE_TOKEN}")
-    # print(f"IMAGE_TOKEN_INDEX is {IMAGE_TOKEN_INDEX}")
+    for subsplit in all_subsplits:
+        questions = [json.loads(q) for q in open(f"{data_folder}/POPE/{subset}/{subset}_pope_{subsplit}.json", "r")]
+        os.makedirs(output_folder, exist_ok=True)
+        output_file = f"{output_folder}/{subset}_pope_{subsplit}_{model_name}.jsonl"
 
-    ### Step 2: Loop through the questions
-    for line in tqdm(questions):
-        ### Step 2.1: Initialize the necessary variables
-        idx = line["question_id"]
-        image_file = line["image"]
-        question = line["text"]
-        cur_prompt = question
+        # print(f"DEFAULT_IMAGE_TOKEN is {DEFAULT_IMAGE_TOKEN}")
+        # print(f"IMAGE_TOKEN_INDEX is {IMAGE_TOKEN_INDEX}")
 
-        ### !!!I'm not sure why we need to append this, because this will make one prompt have two image tokens (<image>), and the llava's original code throws error. I need to check other works' code on llava exps. 
-        # if predictor.model.config.mm_use_im_start_end: 
-        #     qs = DEFAULT_IM_START_TOKEN + DEFAULT_IMAGE_TOKEN + DEFAULT_IM_END_TOKEN + '\n' + question
-        # else:
-        #     qs = DEFAULT_IMAGE_TOKEN + '\n'  + question
-        qs = question
-        print(f"qs: {qs}")
+        ### Step 2: Loop through the questions
+        for line in tqdm(questions):
+            ### Step 2.1: Initialize the necessary variables
+            idx = line["question_id"]
+            image_file = line["image"]
+            question = line["text"]
+            cur_prompt = question
 
-        ### Step 2.2: Load the image
-        image_filename_splits = image_file.lower().split('_')
-        if "coco" in image_filename_splits:
-            subdir = image_filename_splits[1]
-            image_path = Path(os.path.join(data_folder, subset, subdir, image_file))
-        elif "aokvqa" in image_filename_splits:
-            subdir = ""
-            image_path = Path(os.path.join(data_folder, subset, image_file))
+            ### !!!I'm not sure why we need to append this, because this will make one prompt have two image tokens (<image>), and the llava's original code throws error. I need to check other works' code on llava exps. 
+            # if predictor.model.config.mm_use_im_start_end: 
+            #     qs = DEFAULT_IM_START_TOKEN + DEFAULT_IMAGE_TOKEN + DEFAULT_IM_END_TOKEN + '\n' + question
+            # else:
+            #     qs = DEFAULT_IMAGE_TOKEN + '\n'  + question
+            qs = question
+            print(f"qs: {qs}")
 
-
-        ### Step 3: Generate the answer with predictor. Parameters are set to match the POPE evaluation protocol.
-        output = predictor.predict(
-            image=image_path,
-            prompt=qs + " Please answer this question with one word.",
-            top_p=1.0,
-            top_k=None,
-            temperature=1.0,
-            max_tokens=1024,
-        )
-        print(output)
+            ### Step 2.2: Load the image
+            image_filename_splits = image_file.lower().split('_')
+            if "coco" in image_filename_splits or "aokvqa" in image_filename_splits:
+                subdir = image_filename_splits[1]
+                image_path = Path(os.path.join(data_folder, "coco", subdir, image_file))
+            elif "gqa" in subset.lower():
+                subdir = "images"
+                image_path = Path(os.path.join(data_folder, subset, "allImages", subdir, image_file))
 
 
-        ### Step 4: Save the output to the output file
-        with open(output_file, "a") as f:
-            f.write(json.dumps({"question_id": idx, 
-                                "prompt": cur_prompt,
-                                "text": output.strip(), 
-                                "model_id": model_name,
-                                "image": image_file, 
-                                "metadata": {}}) + "\n")
+            ### Step 3: Generate the answer with predictor. Parameters are set to match the POPE evaluation protocol.
+            output = predictor.predict(
+                image=image_path,
+                prompt=qs + " Please answer this question with one word.",
+                top_p=1.0,
+                top_k=None,
+                temperature=1.0,
+                max_tokens=1024,
+            )
+            print(output)
+
+
+            ### Step 4: Save the output to the output file
+            with open(output_file, "a") as f:
+                f.write(json.dumps({"question_id": idx, 
+                                    "prompt": cur_prompt,
+                                    "text": output.strip(), 
+                                    "model_id": model_name,
+                                    "image": image_file, 
+                                    "metadata": {}}) + "\n")
 
 
 

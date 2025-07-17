@@ -10,7 +10,7 @@ def parse_args():
     argparser.add_argument("--model_name", type=str, default="llava-v1.5-7b", help="Name of the model to use for inference.")
     argparser.add_argument("--benchmark", type=str, default="pope", help="The benchmark of the experiment. eg: pope, chair, etc.")
     argparser.add_argument("--data_folder", type=str, default="../../data", help="Path to the data folder containing POPE dataset.")
-    argparser.add_argument("--subset", type=str, default="coco", help="Subset of the POPE dataset to use.")
+    argparser.add_argument("--subset", type=str, default="gqa", help="Subset of the POPE dataset to use. The three options are: coco, aokvqa, and gqa.")
     argparser.add_argument("--subsplit", type=str, default="popular", help="Subsplit of the POPE dataset to use.")
     argparser.add_argument("--output_folder", type=str, default="../results", help="Folder to save the results.")
     return argparser.parse_args()
