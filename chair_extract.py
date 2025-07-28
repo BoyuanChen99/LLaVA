@@ -11,14 +11,9 @@ FLAGS = argparse.parse_args()
 
 
 def main(args):
-    ### Step 0: Define the MSCOCO dir, the output dir, and the random seed for numpy
-    coco_dir = "../data/coco/val2014"
-    chair_dir = "../data/CHAIR"
-    seed = 1994
-
     ### Step 1: Randomly select 500 filenames ending with .jpg from the MSCOCO dir, with numpy
-    np.random.seed(1994)
-    all_files = [f for f in os.listdir(coco_dir) if f.endswith('.jpg')]
+    np.random.seed(args.seed)
+    all_files = [f for f in os.listdir(args.coco_dir) if f.endswith('.jpg')]
     selected_files = np.random.choice(all_files, size=500, replace=False)
     selected_files = sorted(selected_files)
 
@@ -29,9 +24,9 @@ def main(args):
             "question_id": question_id,
             "image": image_file,
             "text": f"Please help me describe the image in detail.",
-            "seed": seed
+            "seed": args.seed
         }
-        with open(os.path.join(chair_dir, f"chair_coco_{seed}.json"), "a") as f:
+        with open(os.path.join(args.chair_dir, f"chair_{args.seed}.json"), "a") as f:
             json.dump(question, f)
             f.write("\n")
 

@@ -1,5 +1,5 @@
 """
-This pope evaluation script is adapted from predict.py in original LLaVA-v1.5 repo, and the AGLA code repo. As the latter does not support multi-gpu, it is very likely to exceed memory limit. Therefore, this script is created. 
+This pope evaluation script is adapted from predict.py in original LLaVA-v1.5 repo. 
 """
 
 import os
@@ -7,7 +7,7 @@ import torch
 from PIL import Image
 import requests
 from io import BytesIO
-from llava.constants import IMAGE_TOKEN_INDEX, DEFAULT_IMAGE_TOKEN, DEFAULT_IM_START_TOKEN, DEFAULT_IM_END_TOKEN
+from llava.constants import IMAGE_TOKEN_INDEX, DEFAULT_IMAGE_TOKEN
 from llava.conversation import conv_templates, SeparatorStyle
 from llava.model.builder import load_pretrained_model
 from llava.utils import disable_torch_init
@@ -33,8 +33,6 @@ model_author = "liuhaotian"
 weights = [
     {
         "dest": HUGGINGFACE_CACHE + f"/{model_author}/{model_name}",
-        # git commit hash from huggingface (obsolete, as the LLaVA-v1.5 is no longer updated, we don't need to use git commit hash)
-        # "src": "llava-v1.5-7b/12e054b30e8e061f423c7264bc97d4248232e965",
         "src": f"{model_author}/{model_name}/resolve/main",
         "files": [
             "config.json",
@@ -116,35 +114,38 @@ class Predictor(BasePredictor):
         conv = conv_templates[conv_mode].copy()
 
         # Process image
-        # image = "./examples/cat.png"
         image_data = load_image(str(image))
         image_tensor = self.image_processor.preprocess(image_data, return_tensors='pt')['pixel_values'].half().cuda()
 
         # Construct input prompt
-        # prompt = "What is in this image? What is the estimated weight of the subject?"
         inp = DEFAULT_IMAGE_TOKEN + '\n' + prompt
         conv.append_message(conv.roles[0], inp)
         conv.append_message(conv.roles[1], None)
         prompt = conv.get_prompt()
 
         input_ids = tokenizer_image_token(prompt, self.tokenizer, IMAGE_TOKEN_INDEX, return_tensors='pt').unsqueeze(0).cuda()
-        # print(f"Input IDs shape: {input_ids.shape}")
-        # print(f"Input IDs: {input_ids}")
         stop_str = conv.sep if conv.sep_style != SeparatorStyle.TWO else conv.sep2
-        keywords = [stop_str]
 
         with torch.inference_mode():
-            output_ids = self.model.generate(
-                input_ids,
-                images=image_tensor,
-                do_sample=True,
-                temperature=temperature,
-                top_p=top_p,
-                top_k=top_k,
-                max_new_tokens=max_tokens,
-                use_cache=True
-            )
-        input_token_len = input_ids.shape[1]
+            if temperature > 0:
+                output_ids = self.model.generate(
+                    input_ids,
+                    images=image_tensor,
+                    do_sample=True,
+                    temperature=temperature,
+                    top_p=top_p,
+                    top_k=top_k,
+                    max_new_tokens=max_tokens,
+                    use_cache=True
+                )
+            else:
+                output_ids = self.model.generate(
+                    input_ids,
+                    images=image_tensor,
+                    do_sample=False,
+                    max_new_tokens=max_tokens,
+                    use_cache=True
+                )
         output_text = self.tokenizer.batch_decode(output_ids[:, :], skip_special_tokens=True)[0].strip()
 
         # Remove stop string if present
@@ -163,6 +164,7 @@ def load_image(image_file):
     return image
 
 
+
 ### ======== Main ======== ###
 def main():
     ### Step 0: Initialize the VLM
@@ -170,68 +172,68 @@ def main():
     predictor.setup()
     
     ### Step 1: Load POPE
+    all_subsets = ["coco", "gqa", "aokvqa"]
     all_subsplits = ["popular", "adversarial", "random"]
     data_folder = "../data"
-    subset = "gqa"
-    subsplit = "popular"
     model_name = "llava-v1.5-7b"
     output_folder = "./results/pope"
     os.makedirs(output_folder, exist_ok=True)
 
-    for subsplit in all_subsplits:
-        questions = [json.loads(q) for q in open(f"{data_folder}/POPE/{subset}/{subset}_pope_{subsplit}.json", "r")]
-        os.makedirs(output_folder, exist_ok=True)
-        output_file = f"{output_folder}/{subset}_pope_{subsplit}_{model_name}.jsonl"
+    for subset in all_subsets:
+        for subsplit in all_subsplits:
+            questions = [json.loads(q) for q in open(f"{data_folder}/POPE/{subset}/{subset}_pope_{subsplit}.json", "r")]
+            os.makedirs(output_folder, exist_ok=True)
+            output_file = f"{output_folder}/{subset}_pope_{subsplit}_{model_name}.jsonl"
 
-        # print(f"DEFAULT_IMAGE_TOKEN is {DEFAULT_IMAGE_TOKEN}")
-        # print(f"IMAGE_TOKEN_INDEX is {IMAGE_TOKEN_INDEX}")
+            # print(f"DEFAULT_IMAGE_TOKEN is {DEFAULT_IMAGE_TOKEN}")
+            # print(f"IMAGE_TOKEN_INDEX is {IMAGE_TOKEN_INDEX}")
 
-        ### Step 2: Loop through the questions
-        for line in tqdm(questions):
-            ### Step 2.1: Initialize the necessary variables
-            idx = line["question_id"]
-            image_file = line["image"]
-            question = line["text"]
-            cur_prompt = question
+            ### Step 2: Loop through the questions
+            for line in tqdm(questions):
+                ### Step 2.1: Initialize the necessary variables
+                idx = line["question_id"]
+                image_file = line["image"]
+                question = line["text"]
+                cur_prompt = question
 
-            ### !!!I'm not sure why we need to append this, because this will make one prompt have two image tokens (<image>), and the llava's original code throws error. I need to check other works' code on llava exps. 
-            # if predictor.model.config.mm_use_im_start_end: 
-            #     qs = DEFAULT_IM_START_TOKEN + DEFAULT_IMAGE_TOKEN + DEFAULT_IM_END_TOKEN + '\n' + question
-            # else:
-            #     qs = DEFAULT_IMAGE_TOKEN + '\n'  + question
-            qs = question
-            print(f"qs: {qs}")
+                ### !!!I'm not sure why we need to append this, because this will make one prompt have two image tokens (<image>), and the llava's original code throws error. I need to check other works' code on llava exps. 
+                # if predictor.model.config.mm_use_im_start_end: 
+                #     qs = DEFAULT_IM_START_TOKEN + DEFAULT_IMAGE_TOKEN + DEFAULT_IM_END_TOKEN + '\n' + question
+                # else:
+                #     qs = DEFAULT_IMAGE_TOKEN + '\n'  + question
+                qs = question
+                # print(f"qs: {qs}")
 
-            ### Step 2.2: Load the image
-            image_filename_splits = image_file.lower().split('_')
-            if "coco" in image_filename_splits or "aokvqa" in image_filename_splits:
-                subdir = image_filename_splits[1]
-                image_path = Path(os.path.join(data_folder, "coco", subdir, image_file))
-            elif "gqa" in subset.lower():
-                subdir = "images"
-                image_path = Path(os.path.join(data_folder, subset, "allImages", subdir, image_file))
-
-
-            ### Step 3: Generate the answer with predictor. Parameters are set to match the POPE evaluation protocol.
-            output = predictor.predict(
-                image=image_path,
-                prompt=qs + " Please answer this question with one word.",
-                top_p=1.0,
-                top_k=None,
-                temperature=1.0,
-                max_tokens=1024,
-            )
-            print(output)
+                ### Step 2.2: Load the image
+                image_filename_splits = image_file.lower().split('_')
+                if "coco" in image_filename_splits or "aokvqa" in image_filename_splits:
+                    subdir = image_filename_splits[1]
+                    image_path = Path(os.path.join(data_folder, "coco", subdir, image_file))
+                elif "gqa" in subset.lower():
+                    subdir = "images"
+                    image_path = Path(os.path.join(data_folder, subset, "allImages", subdir, image_file))
 
 
-            ### Step 4: Save the output to the output file
-            with open(output_file, "a") as f:
-                f.write(json.dumps({"question_id": idx, 
-                                    "prompt": cur_prompt,
-                                    "text": output.strip(), 
-                                    "model_id": model_name,
-                                    "image": image_file, 
-                                    "metadata": {}}) + "\n")
+                ### Step 3: Generate the answer with predictor. Parameters are set to match the POPE evaluation protocol.
+                output = predictor.predict(
+                    image=image_path,
+                    prompt=qs + " Please answer this question with one word.",
+                    # top_p=1.0,
+                    # top_k=None,
+                    temperature=0.0,
+                    max_tokens=512,
+                )
+                # print(output)
+
+
+                ### Step 4: Save the output to the output file
+                with open(output_file, "a") as f:
+                    f.write(json.dumps({"question_id": idx, 
+                                        "prompt": cur_prompt,
+                                        "text": output.strip(), 
+                                        "model_id": model_name,
+                                        "image": image_file, 
+                                        "metadata": {}}) + "\n")
 
 
 
